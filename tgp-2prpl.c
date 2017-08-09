@@ -239,13 +239,26 @@ int p2tgl_imgstore_add_with_id_png (const unsigned char *raw_bitmap, unsigned wi
     return 0;
   }
   
+  // Set up error handling.
+  if (setjmp(png_jmpbuf(png_ptr))) {
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    warning ("error while writing png");
+    return 0;
+  }
+  
   // set img attributes
   png_set_IHDR (png_ptr, info_ptr, width, height, 
                 8, PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
   
   // alloc row pointers
-  rows = (png_bytepp) png_malloc(png_ptr, height * sizeof(png_bytep));
+  rows = (png_bytepp) malloc(height * sizeof(png_bytep));
+  if (rows == NULL) {
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    warning ("error converting to png: malloc failed");
+    return 0;
+  }
+  
   int i;
   for (i = 0; i < height; i++)
     rows[i] = (png_bytep)(raw_bitmap + (height - i) * width * 4);
@@ -254,11 +267,11 @@ int p2tgl_imgstore_add_with_id_png (const unsigned char *raw_bitmap, unsigned wi
   png_set_write_fn (png_ptr, &state, p2tgl_png_mem_write, NULL);
   
   // write png
-  png_write_image (png_ptr, rows);
-  png_write_end (png_ptr, info_ptr);
-  
+  png_set_rows (png_ptr, info_ptr, rows);
+  png_write_png (png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
+
   // cleanup
-  png_free(png_ptr, rows);
+  free(rows);
   png_destroy_write_struct (&png_ptr, &info_ptr);
   
   return purple_imgstore_add_with_id (state.buffer, state.size, NULL);
